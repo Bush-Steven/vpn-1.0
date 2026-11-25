@@ -172,27 +172,37 @@ toggle.addEventListener('change',async e=>{
  const target=e.target.checked;
  if(!backendMode){setStatus(target);return;}
  toggle.disabled=true;label.textContent=target?'CONNECTING':'DISCONNECTING';
+ document.querySelector('.connection').classList.add('is-working');
  try{
   const response=await fetch(target?'/api/connect':'/api/disconnect',{method:'POST'});
   const data=await response.json();
-  if(!response.ok)throw new Error(data.error||'VPN command failed');
-  await refreshBackendStatus();toast(data.message);
- }catch(err){toggle.checked=!target;toast('VPN action failed: '+err.message)}
- finally{toggle.disabled=false}
+  if(!response.ok)throw new Error(data.error||'WireGuard command failed');
+  await refreshBackendStatus();
+  toast(data.message||'WireGuard state updated');
+ }catch(err){
+  toggle.checked=!target;
+  toast('VPN action failed: '+err.message);
+  await refreshBackendStatus().catch(()=>{});
+ }finally{
+  toggle.disabled=false;document.querySelector('.connection').classList.remove('is-working');
+ }
 });
 async function refreshBackendStatus(){
- const r=await fetch('/api/status',{cache:'no-store'});const d=await r.json();
+ const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw new Error('Controller status unavailable');
+ const d=await r.json();
  connected=!!d.connected;toggle.checked=connected;
  document.getElementById('headerStatus').textContent=connected?'VPN CONNECTED':'VPN // OFFLINE';
- statusText.textContent=connected?'WireGuard connected':'Not connected';
- sub.textContent=connected?'Real local WireGuard interface is active':'WireGuard interface is down';
+ statusText.textContent=connected?'WireGuard tunnel active':'WireGuard interface down';
+ sub.textContent=connected?'Live interface: '+d.interface+' · latest handshake: '+(d.latestHandshake||'unknown'):'No VPN tunnel is currently routing traffic';
  label.textContent=connected?'ON':'OFF';document.getElementById('stateIcon').textContent=connected?'✓':'⌁';
- document.getElementById('enc').textContent=connected?'● ACTIVE':'● DISABLED';
+ document.getElementById('enc').textContent=connected?'● WIREGUARD ACTIVE':'● DISABLED';
  document.getElementById('enc').style.color=connected?'var(--green)':'var(--muted)';
  document.getElementById('net').textContent=connected?'● REAL WIREGUARD':'● LOCAL';
  document.getElementById('net').style.color=connected?'var(--green)':'var(--muted)';
+ const rx=Number(d.receivedBytes||0),tx=Number(d.sentBytes||0);
+ document.getElementById('data').innerHTML=((rx+tx)/1048576).toFixed(2)+' <em>MB</em>';
+ document.getElementById('duration').textContent=connected?(d.latestHandshake&&d.latestHandshake!=='Never'?d.latestHandshake:'Connected'):'00:00:00';
 }
-
 ['killToggle','dnsToggle'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{document.getElementById('kill').textContent=document.getElementById('killToggle').checked?'● ON':'● OFF';document.getElementById('dns').textContent=document.getElementById('dnsToggle').checked?'● ON':'● OFF';toast('Preference updated in this interface only')}));
 document.getElementById('serverPicker').addEventListener('click',()=>document.getElementById('serverDialog').showModal());
 document.getElementById('serverPicker').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('serverDialog').showModal()}});
